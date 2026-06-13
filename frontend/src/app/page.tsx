@@ -61,6 +61,12 @@ export default function LandingPage() {
               Bắt đầu ngay hôm nay
               <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
             </Link>
+            <Link 
+              href="/login" 
+              className="flex items-center justify-center rounded-xl border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900/80 px-6 py-4 text-base font-semibold text-slate-700 dark:text-slate-300 transition-colors shadow-sm"
+            >
+              Trải nghiệm Demo
+            </Link>
           </div>
         </div>
 

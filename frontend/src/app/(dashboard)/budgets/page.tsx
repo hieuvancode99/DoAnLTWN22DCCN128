@@ -3,8 +3,6 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import axiosInstance from '@/lib/axios';
-import { useSession } from 'next-auth/react';
-import { useRealtimeEvents } from '@/hooks/useRealtimeEvents';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -16,8 +14,7 @@ import {
   Trash2,
   Calendar,
   DollarSign,
-  Info,
-  Edit2
+  Info
 } from 'lucide-react';
 
 const budgetSchema = z.object({
@@ -30,7 +27,6 @@ const budgetSchema = z.object({
 type BudgetFormValues = z.input<typeof budgetSchema>;
 
 export default function BudgetsPage() {
-  const { data: session } = useSession();
   const [budgetsStatus, setBudgetsStatus] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,7 +41,7 @@ export default function BudgetsPage() {
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [amountDisplay, setAmountDisplay] = useState('');
 
-  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<BudgetFormValues>({
+  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<BudgetFormValues>({
     resolver: zodResolver(budgetSchema),
     defaultValues: {
       categoryId: '',
@@ -89,16 +85,6 @@ export default function BudgetsPage() {
     fetchBudgetsStatus();
   }, [fetchBudgetsStatus]);
 
-  useRealtimeEvents({
-    userId: (session?.user as any)?._id,
-    onTransactionChange: () => {
-      fetchBudgetsStatus();
-    },
-    onBudgetChange: () => {
-      fetchBudgetsStatus();
-    }
-  });
-
   const onSubmit = async (data: BudgetFormValues) => {
     setMessage(null);
     setSubmitLoading(true);
@@ -138,27 +124,6 @@ export default function BudgetsPage() {
     const numericValue = parseInt(rawValue, 10);
     setAmountDisplay(numericValue.toLocaleString('vi-VN'));
     setValue('amountLimit', numericValue, { shouldValidate: true });
-  };
-
-  const handleEdit = (budget: any) => {
-    setValue('categoryId', budget.category._id);
-    setValue('amountLimit', budget.amountLimit);
-    setAmountDisplay(budget.amountLimit.toLocaleString('vi-VN'));
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa ngân sách này?')) return;
-    try {
-      const res = await axiosInstance.delete(`/budgets/${id}`);
-      if (res.data.success) {
-        setMessage({ text: 'Xóa ngân sách thành công!', type: 'success' });
-        fetchBudgetsStatus();
-      }
-    } catch (err: any) {
-      console.error(err);
-      setMessage({ text: 'Lỗi khi xóa ngân sách.', type: 'error' });
-    }
   };
 
   return (
@@ -221,35 +186,6 @@ export default function BudgetsPage() {
                   className="w-full rounded-xl border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950/60 py-3 pl-9 pr-3 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
                 />
               </div>
-              
-              {/* Quick Amount Suggestion Buttons */}
-              <div className="flex flex-wrap gap-2 mt-2">
-                {[500000, 1000000, 2000000, 5000000, 10000000].map(amt => (
-                  <button
-                    key={amt}
-                    type="button"
-                    onClick={() => {
-                      const current = Number(watch('amountLimit')) || 0;
-                      setValue('amountLimit', current + amt, { shouldValidate: true });
-                      setAmountDisplay((current + amt).toLocaleString('vi-VN'));
-                    }}
-                    className="px-2.5 py-1 text-xs font-medium rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-500/20 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-colors"
-                  >
-                    +{amt >= 1000000 ? `${amt/1000000}M` : `${amt/1000}K`}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setValue('amountLimit', 0 as any);
-                    setAmountDisplay('');
-                  }}
-                  className="px-2.5 py-1 text-xs font-medium rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-                >
-                  Xóa
-                </button>
-              </div>
-
               {errors.amountLimit && <p className="text-xs text-red-400">{errors.amountLimit.message}</p>}
             </div>
 
@@ -354,25 +290,9 @@ export default function BudgetsPage() {
                             Đã tiêu: <span className="font-semibold text-slate-700 dark:text-slate-300">{budget.spent.toLocaleString('vi-VN')} đ</span> / Hạn mức: {budget.amountLimit.toLocaleString('vi-VN')} đ
                           </p>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className={`text-xs font-bold rounded-lg px-2 py-1 ${bgBadge}`}>
-                            {budget.percentage}%
-                          </span>
-                          <button
-                            onClick={() => handleEdit(budget)}
-                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors"
-                            title="Sửa ngân sách"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(budget._id)}
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
-                            title="Xóa ngân sách"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
+                        <span className={`text-xs font-bold rounded-lg px-2 py-1 ${bgBadge}`}>
+                          {budget.percentage}%
+                        </span>
                       </div>
                       
                       {/* Bar */}

@@ -127,28 +127,4 @@ const getBudgetStatus = async (req, res) => {
   }
 };
 
-// @desc    Delete budget
-// @route   DELETE /api/budgets/:id
-// @access  Private
-const deleteBudget = async (req, res) => {
-  try {
-    const budget = await Budget.findOneAndDelete({ _id: req.params.id, userId: req.user._id });
-    
-    if (!budget) {
-      return res.status(404).json({ success: false, message: 'Budget not found' });
-    }
-
-    // Emit realtime event
-    const io = req.app.get('io');
-    if (io) {
-      io.emit('budget:updated', { userId: req.user._id.toString() });
-    }
-
-    res.json({ success: true, message: 'Budget deleted successfully' });
-  } catch (error) {
-    console.error('Delete budget error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-};
-
-module.exports = { getBudgets, setBudget, getBudgetStatus, deleteBudget };
+module.exports = { getBudgets, setBudget, getBudgetStatus };

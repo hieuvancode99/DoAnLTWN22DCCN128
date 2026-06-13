@@ -44,6 +44,8 @@ const transactionSchema = z.object({
 
 type TransactionFormValues = z.input<typeof transactionSchema>;
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+
 const iconMap: Record<string, React.ComponentType<any>> = {
   utensils: Utensils,
   car: Car,
@@ -218,14 +220,17 @@ export default function TransactionsPage() {
     // Open in new tab or trigger direct download
     // NextAuth tokens are in headers, so for downloads it's easier to fetch or use a temp download mechanism.
     // Let's create an authorized fetch download helper:
-    downloadFile(`http://localhost:5000/api/reports/export?${params.toString()}`, `bao-cao-tai-chinh-${Date.now()}.${format}`);
+    downloadFile(`${API_URL}/reports/export?${params.toString()}`, `bao-cao-tai-chinh-${Date.now()}.${format}`);
   };
 
   const downloadFile = async (url: string, filename: string) => {
     try {
       // Get auth header from Axios client interceptor setup
       const res = await axiosInstance.get(url, { responseType: 'blob' });
-      const blob = new Blob([res.data], { type: res.headers['content-type'] });
+      const contentType = typeof res.headers['content-type'] === 'string'
+        ? res.headers['content-type']
+        : 'application/octet-stream';
+      const blob = new Blob([res.data], { type: contentType });
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
@@ -277,27 +282,27 @@ export default function TransactionsPage() {
       </div>
 
       {/* Filter and Actions Bar */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-5 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/40 backdrop-blur-md transition-colors duration-300">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-4 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/40 backdrop-blur-md transition-colors duration-300">
         {/* Search */}
-        <div className="space-y-1.5 xl:col-span-3">
+        <div className="space-y-1">
           <label className="text-xs font-semibold text-slate-700 dark:text-slate-400">Từ khóa tìm kiếm</label>
           <input
             type="text"
             placeholder="Tìm theo mô tả..."
             value={filters.search || ''}
             onChange={(e) => setFilters({ search: e.target.value, page: 1 })}
-            className="w-full rounded-xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 py-2.5 px-3 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
+            className="w-full rounded-xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 py-2.5 px-3 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           />
         </div>
 
         {/* Type & Category */}
-        <div className="space-y-1.5 xl:col-span-3">
+        <div className="space-y-1">
           <label className="text-xs font-semibold text-slate-700 dark:text-slate-400">Loại & Danh mục</label>
           <div className="flex gap-2">
             <select
               value={filters.type || ''}
               onChange={(e) => setFilters({ type: e.target.value, categoryId: '', page: 1 })}
-              className="w-1/2 rounded-xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 py-2.5 px-3 text-sm text-slate-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
+              className="w-1/2 rounded-xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 py-2.5 px-3 text-sm text-slate-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
             >
               <option value="">Tất cả loại</option>
               <option value="income">Thu nhập</option>
@@ -307,7 +312,7 @@ export default function TransactionsPage() {
             <select
               value={filters.categoryId || ''}
               onChange={(e) => setFilters({ categoryId: e.target.value, page: 1 })}
-              className="w-1/2 rounded-xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 py-2.5 px-3 text-sm text-slate-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
+              className="w-1/2 rounded-xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 py-2.5 px-3 text-sm text-slate-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
             >
               <option value="">Tất cả danh mục</option>
               {categories
@@ -320,39 +325,39 @@ export default function TransactionsPage() {
         </div>
 
         {/* Date Filter */}
-        <div className="space-y-1.5 xl:col-span-4">
+        <div className="space-y-1">
           <label className="text-xs font-semibold text-slate-700 dark:text-slate-400">Lọc theo ngày</label>
           <div className="flex items-center gap-2">
             <input
               type="date"
               value={filters.startDate || ''}
               onChange={(e) => setFilters({ startDate: e.target.value, page: 1 })}
-              className="w-1/2 rounded-xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 py-2 px-3 text-sm text-slate-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none transition-colors"
+              className="w-1/2 rounded-xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 py-2 px-3 text-sm text-slate-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none"
             />
-            <span className="text-slate-400 text-xs">-</span>
+            <span className="text-slate-500 text-xs">-</span>
             <input
               type="date"
               value={filters.endDate || ''}
               onChange={(e) => setFilters({ endDate: e.target.value, page: 1 })}
-              className="w-1/2 rounded-xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 py-2 px-3 text-sm text-slate-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none transition-colors"
+              className="w-1/2 rounded-xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 py-2 px-3 text-sm text-slate-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none"
             />
           </div>
         </div>
 
         {/* Export Reports */}
-        <div className="space-y-1.5 xl:col-span-2 flex flex-col justify-end">
-          <label className="text-xs font-semibold text-slate-700 dark:text-slate-400 mb-0.5">Xuất báo cáo</label>
+        <div className="space-y-1 flex flex-col justify-end">
+          <label className="text-xs font-semibold text-slate-700 dark:text-slate-400 mb-1">Xuất báo cáo</label>
           <div className="flex gap-2">
             <button
               onClick={() => handleExport('xlsx')}
-              className="flex w-1/2 items-center justify-center gap-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 py-2.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 transition-colors duration-200"
+              className="flex w-1/2 items-center justify-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 hover:bg-slate-200 dark:hover:bg-slate-900 py-2.5 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors duration-200"
             >
               <Download className="h-4 w-4" />
               Excel
             </button>
             <button
               onClick={() => handleExport('pdf')}
-              className="flex w-1/2 items-center justify-center gap-1.5 rounded-xl border border-rose-200 dark:border-rose-800/50 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 py-2.5 text-xs font-semibold text-rose-700 dark:text-rose-400 transition-colors duration-200"
+              className="flex w-1/2 items-center justify-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 hover:bg-slate-200 dark:hover:bg-slate-900 py-2.5 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors duration-200"
             >
               <Download className="h-4 w-4" />
               PDF

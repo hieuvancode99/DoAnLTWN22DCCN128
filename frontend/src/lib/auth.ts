@@ -1,6 +1,8 @@
 import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
@@ -15,7 +17,7 @@ export const authOptions: NextAuthOptions = {
         }
 
         try {
-          const res = await fetch('http://localhost:5000/api/auth/login', {
+          const res = await fetch(`${API_URL}/auth/login`, {
             method: 'POST',
             body: JSON.stringify({
               email: credentials.email,
@@ -55,6 +57,7 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user) {
         (session.user as any).id = token.id;
+        (session.user as any)._id = token.id;
         (session.user as any).role = token.role;
       }
       (session as any).accessToken = token.accessToken;
