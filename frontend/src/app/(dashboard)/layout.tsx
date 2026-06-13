@@ -162,10 +162,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         
         // Refresh server-rendered page data
         router.refresh();
-        // Trigger page reloading if we are in dashboard page
-        if (pathname === '/dashboard') {
-          window.location.reload();
-        }
       } else {
         setQuickToast({ show: true, msg: res.message || 'Lỗi thêm nhanh.', type: 'error' });
       }

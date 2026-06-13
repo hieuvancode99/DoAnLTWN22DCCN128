@@ -1,18 +1,20 @@
 'use strict';
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Wallet, User, Mail, Lock, ArrowRight, AlertCircle, CheckCircle2, Loader2, Home } from 'lucide-react';
+import axios from 'axios';
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Tên phải có ít nhất 2 ký tự'),
   email: z.string().min(1, 'Email không được để trống').email('Email không đúng định dạng'),
-  password: z.string().min(6, 'Mật khẩu phải có ít nhất 6 ký tự')
+  password: z.string().min(6, 'Mật khẩu phải có ít nhất 6 ký tự'),
+  otp: z.string().length(6, 'Mã OTP phải gồm 6 số')
 });
 
 type RegisterFormValues = z.infer<typeof registerSchema>;
@@ -23,10 +25,41 @@ export default function RegisterPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const { register, handleSubmit, formState: { errors } } = useForm<RegisterFormValues>({
+  const { register, handleSubmit, formState: { errors }, getValues } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { name: '', email: '', password: '' }
+    defaultValues: { name: '', email: '', password: '', otp: '' }
   });
+
+  const [countdown, setCountdown] = useState(0);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+
+  useEffect(() => {
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [countdown]);
+
+  const handleSendOtp = async () => {
+    const email = getValues('email');
+    if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+      alert("Vui lòng nhập email hợp lệ trước khi nhận mã!");
+      return;
+    }
+    
+    setIsSendingOtp(true);
+    try {
+      const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/auth/send-otp`, { email });
+      if (res.data.success) {
+        setCountdown(60);
+        alert("Đã gửi mã OTP! Vui lòng kiểm tra email của bạn.");
+      }
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Lỗi gửi OTP");
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
 
   const onSubmit = async (data: RegisterFormValues) => {
     setError(null);
@@ -142,6 +175,36 @@ export default function RegisterPage() {
               {errors.email && (
                 <p className="text-xs text-red-400 mt-1">{errors.email.message}</p>
               )}
+            </div>
+
+            <div className="flex gap-2 items-start">
+              <div className="flex-1 space-y-1">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                  Mã OTP
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    {...register('otp')}
+                    className="block w-full rounded-xl border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950/60 py-3 px-3 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 sm:text-sm"
+                    placeholder="Nhập mã 6 số"
+                    maxLength={6}
+                  />
+                </div>
+                {errors.otp && (
+                  <p className="text-xs text-red-400 mt-1">{errors.otp.message}</p>
+                )}
+              </div>
+              <div className="pt-6">
+                <button
+                  type="button"
+                  onClick={handleSendOtp}
+                  disabled={countdown > 0 || isSendingOtp}
+                  className="rounded-xl h-[46px] px-4 text-sm font-semibold border border-indigo-600 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                >
+                  {isSendingOtp ? 'Đang gửi...' : countdown > 0 ? `Thử lại sau ${countdown}s` : 'Nhận mã OTP'}
+                </button>
+              </div>
             </div>
 
             <div className="space-y-1">
