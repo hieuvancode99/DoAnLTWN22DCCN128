@@ -1,17 +1,15 @@
 'use strict';
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import axiosInstance from '@/lib/axios';
 import { 
   BrainCircuit, 
   Sparkles, 
   Send, 
   Loader2, 
-  CheckCircle,
-  HelpCircle,
-  TrendingUp,
-  AlertCircle
+  User,
+  MessageSquare
 } from 'lucide-react';
 
 // A simple but powerful Markdown-to-HTML formatter component that doesn't need external dependencies
@@ -89,103 +87,175 @@ function parseInlineFormatting(text: string) {
   return res;
 }
 
-export default function AiAdvisorPage() {
-  const [loading, setLoading] = useState(false);
-  const [advice, setAdvice] = useState<string | null>(null);
+type Message = {
+  role: 'user' | 'model';
+  content: string;
+};
 
-  const handleGetAdvice = async () => {
-    setLoading(true);
-    setAdvice(null);
+const SUGGESTED_QUESTIONS = [
+  "Phân tích nhanh tổng thu và tổng chi của tôi trong thời gian qua.",
+  "Tôi đang chi tiêu quá nhiều vào danh mục nào?",
+  "Làm thế nào để tôi có thể tiết kiệm 10% thu nhập trong tháng tới?",
+  "Đánh giá tính hợp lý trong cách tôi phân bổ tiền.",
+];
+
+export default function AiAdvisorPage() {
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      role: 'model',
+      content: 'Chào bạn! Tôi là Cố vấn Tài chính AI của Smart Finance. Bạn muốn tôi phân tích điều gì từ lịch sử giao dịch của bạn hôm nay?'
+    }
+  ]);
+  const [inputValue, setInputValue] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, isLoading]);
+
+  const handleSendMessage = async (text: string) => {
+    if (!text.trim() || isLoading) return;
+
+    const userMessage: Message = { role: 'user', content: text };
+    setMessages(prev => [...prev, userMessage]);
+    setInputValue('');
+    setIsLoading(true);
+
     try {
-      const res = await axiosInstance.post('/ai/savings-suggestion');
+      const history = messages.filter(m => m.role !== 'model' || m.content !== 'Chào bạn! Tôi là Cố vấn Tài chính AI của Smart Finance. Bạn muốn tôi phân tích điều gì từ lịch sử giao dịch của bạn hôm nay?');
+      
+      const res = await axiosInstance.post('/ai/chat', {
+        message: text,
+        history: history.length > 0 ? history : undefined
+      });
+
       if (res.data.success) {
-        setAdvice(res.data.data);
+        setMessages(prev => [...prev, { role: 'model', content: res.data.data }]);
+      } else {
+        setMessages(prev => [...prev, { role: 'model', content: res.data.message || 'Có lỗi xảy ra, vui lòng thử lại.' }]);
       }
     } catch (err) {
       console.error(err);
-      setAdvice('### Lỗi hệ thống\n\nKhông thể kết nối đến AI Advisor. Vui lòng kiểm tra lại kết nối mạng hoặc thử lại sau ít phút.');
+      setMessages(prev => [...prev, { role: 'model', content: '### Lỗi hệ thống\nKhông thể kết nối đến AI Advisor lúc này. Vui lòng kiểm tra lại kết nối.' }]);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    handleSendMessage(inputValue);
+  };
+
   return (
-    <div className="space-y-8 max-w-4xl mx-auto">
+    <div className="flex flex-col h-[calc(100vh-8rem)] max-w-5xl mx-auto space-y-4">
       {/* Header */}
-      <div>
+      <div className="flex-shrink-0">
         <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2.5">
           <BrainCircuit className="h-8 w-8 text-indigo-600 dark:text-indigo-500" />
           Cố vấn tài chính AI
         </h1>
-        <p className="text-slate-600 dark:text-slate-400 mt-1">Cung cấp báo cáo phân tích chi tiêu cá nhân thông minh và các giải pháp tiết kiệm hiệu quả từ Trí tuệ Nhân tạo.</p>
+        <p className="text-slate-600 dark:text-slate-400 mt-1">Trò chuyện trực tiếp với AI để nhận lời khuyên được cá nhân hóa dựa trên dữ liệu giao dịch của bạn.</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6">
-        {/* Intro Banner */}
-        <div className="relative overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-indigo-50 dark:bg-indigo-950/20 p-6 shadow-xl backdrop-blur-md">
-          <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-blob"></div>
-          <div className="flex gap-4 items-start z-10 relative">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-600 shrink-0 text-white shadow-lg shadow-indigo-600/20">
-              <Sparkles className="h-6 w-6" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Bạn muốn tối ưu hóa chi tiêu trong tháng?</h2>
-              <p className="text-sm text-slate-700 dark:text-slate-300 mt-1.5 leading-relaxed">
-                Hệ thống sẽ lấy danh sách các giao dịch tài chính gần nhất của bạn, phân tích thói quen mua sắm, ăn uống và hóa đơn, sau đó đưa ra báo cáo chi tiết kèm theo các giải pháp vàng để tiết kiệm tiền mặt hữu hiệu.
-              </p>
+      {/* Chat Area */}
+      <div className="flex-1 flex flex-col bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl backdrop-blur-md overflow-hidden">
+        
+        {/* Messages List */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 scroll-smooth">
+          {messages.map((msg, idx) => (
+            <div key={idx} className={`flex gap-3 sm:gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
               
-              <button
-                onClick={handleGetAdvice}
-                disabled={loading}
-                className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 px-5 py-3 text-sm font-semibold text-white transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-50"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Đang phân tích dữ liệu...
-                  </>
+              {/* Avatar */}
+              <div className={`flex-shrink-0 h-10 w-10 flex items-center justify-center rounded-full shadow-md ${
+                msg.role === 'user' 
+                  ? 'bg-indigo-600 text-white' 
+                  : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
+              }`}>
+                {msg.role === 'user' ? <User className="h-5 w-5" /> : <BrainCircuit className="h-5 w-5" />}
+              </div>
+
+              {/* Message Bubble */}
+              <div className={`relative max-w-[85%] sm:max-w-[75%] rounded-2xl px-5 py-4 ${
+                msg.role === 'user'
+                  ? 'bg-indigo-600 text-white shadow-indigo-600/20'
+                  : 'bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700'
+              }`}>
+                {msg.role === 'user' ? (
+                  <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                 ) : (
-                  <>
-                    <BrainCircuit className="h-4 w-4" />
-                    Phân tích & Nhận lời khuyên AI
-                  </>
+                  <div className="prose prose-slate dark:prose-invert max-w-none">
+                    <CustomMarkdownRenderer content={msg.content} />
+                  </div>
                 )}
-              </button>
+              </div>
+
             </div>
-          </div>
+          ))}
+
+          {/* Typing indicator */}
+          {isLoading && (
+            <div className="flex gap-4 flex-row">
+              <div className="flex-shrink-0 h-10 w-10 flex items-center justify-center rounded-full shadow-md bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                <BrainCircuit className="h-5 w-5 animate-pulse" />
+              </div>
+              <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-4 flex items-center gap-2">
+                <div className="h-2 w-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                <div className="h-2 w-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                <div className="h-2 w-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+              </div>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
         </div>
 
-        {/* AI Response Output Block */}
-        {(loading || advice) && (
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-6 shadow-xl backdrop-blur-md min-h-[300px]">
-            {loading ? (
-              <div className="flex flex-col items-center justify-center h-64 gap-3 text-slate-500 dark:text-slate-400">
-                <div className="relative">
-                  <div className="h-12 w-12 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
-                  <BrainCircuit className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-5 w-5 text-indigo-600 dark:text-indigo-400 animate-pulse" />
-                </div>
-                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 mt-2">Cố vấn AI đang xử lý giao dịch của bạn...</p>
-                <p className="text-xs max-w-sm text-center">Chúng tôi đang trích xuất dữ liệu, định dạng prompt và gọi Gemini API để tổng hợp lời khuyên tài chính cá nhân tốt nhất cho bạn.</p>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                <div className="flex items-center gap-2.5 pb-4 border-b border-slate-200 dark:border-slate-800">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600/10 text-indigo-600 dark:text-indigo-400">
-                    <BrainCircuit className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Trí tuệ nhân tạo Finance Advisor</h3>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400">Phản hồi dựa trên dữ liệu thu chi thực tế của bạn</p>
-                  </div>
-                </div>
+        {/* Suggested Questions */}
+        <div className="px-4 pt-2 pb-0 flex gap-2 overflow-x-auto no-scrollbar">
+          {SUGGESTED_QUESTIONS.map((q, i) => (
+            <button
+              key={i}
+              onClick={() => handleSendMessage(q)}
+              disabled={isLoading}
+              className="flex-shrink-0 whitespace-nowrap px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 text-xs sm:text-sm font-medium rounded-full border border-slate-200 dark:border-slate-700 transition-colors disabled:opacity-50"
+            >
+              {q}
+            </button>
+          ))}
+        </div>
 
-                <div className="prose prose-slate dark:prose-invert max-w-none">
-                  <CustomMarkdownRenderer content={advice || ''} />
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Input Form */}
+        <div className="p-4 bg-white dark:bg-slate-900/80 border-t border-slate-200 dark:border-slate-800">
+          <form onSubmit={handleSubmit} className="flex gap-3">
+            <input
+              type="text"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              disabled={isLoading}
+              placeholder="Hỏi AI về tình hình tài chính của bạn..."
+              className="flex-1 bg-slate-50 dark:bg-slate-950/50 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all disabled:opacity-60"
+            />
+            <button
+              type="submit"
+              disabled={!inputValue.trim() || isLoading}
+              className="flex-shrink-0 flex items-center justify-center h-11 w-11 sm:w-auto sm:px-5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-semibold transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-50 disabled:shadow-none"
+            >
+              {isLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <>
+                  <Send className="h-5 w-5" />
+                  <span className="hidden sm:inline ml-2">Gửi</span>
+                </>
+              )}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );
