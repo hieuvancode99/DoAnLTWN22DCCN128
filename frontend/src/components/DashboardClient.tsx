@@ -1,8 +1,9 @@
-'use strict';
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
+import { io } from 'socket.io-client';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -17,7 +18,8 @@ import {
   GraduationCap, 
   Briefcase, 
   Award,
-  Tag
+  Tag,
+  RefreshCw
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -33,10 +35,8 @@ import {
   CartesianGrid
 } from 'recharts';
 
-interface DashboardClientProps {
-  transactions: any[];
-  budgetsStatus: any[];
-}
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const SOCKET_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:5000';
 
 // Icon helper map matching lucide icon names stored in Mongo
 const iconMap: Record<string, React.ComponentType<any>> = {
@@ -51,7 +51,55 @@ const iconMap: Record<string, React.ComponentType<any>> = {
   award: Award
 };
 
-export default function DashboardClient({ transactions, budgetsStatus }: DashboardClientProps) {
+export default function DashboardClient({ transactions: initialTransactions, budgetsStatus: initialBudgets }: { transactions: any[]; budgetsStatus: any[] }) {
+  const { data: session } = useSession();
+  const [transactions, setTransactions] = useState<any[]>(initialTransactions);
+  const [budgetsStatus, setBudgetsStatus] = useState<any[]>(initialBudgets);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [timeFilter, setTimeFilter] = useState<'week' | 'month' | 'year'>('week');
+
+  const token = (session as any)?.accessToken || '';
+
+  const fetchData = useCallback(async (showSpinner = false) => {
+    if (!token) return;
+    if (showSpinner) setIsRefreshing(true);
+    try {
+      const [txRes, budgetRes] = await Promise.all([
+        fetch(`${API_URL}/transactions?limit=100`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store'
+        }),
+        fetch(`${API_URL}/budgets/status`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store'
+        })
+      ]);
+      const txData = await txRes.json();
+      const budgetData = await budgetRes.json();
+      if (txData.success) setTransactions(txData.data);
+      if (budgetData.success) setBudgetsStatus(budgetData.data);
+    } catch (err) {
+      console.error('Dashboard fetch error:', err);
+    } finally {
+      if (showSpinner) setIsRefreshing(false);
+    }
+  }, [token]);
+
+  // Fetch mới khi token sẵn sàng
+  useEffect(() => {
+    if (token) fetchData();
+  }, [token, fetchData]);
+
+  // Socket.IO: lắng nghe sự kiện giao dịch mới từ server
+  useEffect(() => {
+    if (!token) return;
+    const socket = io(SOCKET_URL, { transports: ['websocket'] });
+    socket.on('transaction:new', () => fetchData());
+    socket.on('transaction:updated', () => fetchData());
+    socket.on('transaction:deleted', () => fetchData());
+    return () => { socket.disconnect(); };
+  }, [token, fetchData]);
+
   // 1. Calculate stats
   const totalIncome = transactions
     .filter(t => t.type === 'income')
@@ -78,31 +126,55 @@ export default function DashboardClient({ transactions, budgetsStatus }: Dashboa
 
   const pieData = Object.values(expenseByCategory);
 
-  // 3. Prepare monthly data for BarChart (comparing income vs expense)
-  // Let's group last 30 days daily transactions
-  const dailyDataMap: Record<string, { date: string; income: number; expense: number }> = {};
+  // 3. Prepare data for BarChart based on timeFilter
+  let barData: any[] = [];
   
-  // Initialize last 7 days to ensure chart has items
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    const dateStr = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
-    dailyDataMap[dateStr] = { date: dateStr, income: 0, expense: 0 };
-  }
-
-  transactions.forEach(t => {
-    const dateStr = new Date(t.date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
-    // Only map if it fits into our last 7 days window (to keep chart readable)
-    if (dailyDataMap[dateStr]) {
-      if (t.type === 'income') {
-        dailyDataMap[dateStr].income += t.amount;
-      } else {
-        dailyDataMap[dateStr].expense += t.amount;
-      }
+  if (timeFilter === 'year') {
+    const monthlyDataMap: Record<string, { date: string; income: number; expense: number; monthVal: number }> = {};
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth() + 1;
+    
+    // Last 12 months
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const label = `T${d.getMonth() + 1}`;
+      monthlyDataMap[`${d.getFullYear()}-${d.getMonth() + 1}`] = { date: label, income: 0, expense: 0, monthVal: d.getMonth() + 1 };
     }
-  });
+    
+    transactions.forEach(t => {
+      const d = new Date(t.date);
+      const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
+      if (monthlyDataMap[key]) {
+        if (t.type === 'income') monthlyDataMap[key].income += t.amount;
+        else monthlyDataMap[key].expense += t.amount;
+      }
+    });
+    barData = Object.values(monthlyDataMap);
+  } else {
+    // week or month (daily grouped)
+    const dailyDataMap: Record<string, { date: string; income: number; expense: number }> = {};
+    const daysCount = timeFilter === 'week' ? 7 : 30;
+    
+    for (let i = daysCount - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+      dailyDataMap[dateStr] = { date: dateStr, income: 0, expense: 0 };
+    }
 
-  const barData = Object.values(dailyDataMap);
+    transactions.forEach(t => {
+      const dateStr = new Date(t.date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+      if (dailyDataMap[dateStr]) {
+        if (t.type === 'income') {
+          dailyDataMap[dateStr].income += t.amount;
+        } else {
+          dailyDataMap[dateStr].expense += t.amount;
+        }
+      }
+    });
+    barData = Object.values(dailyDataMap);
+  }
 
   // Recent 5 transactions
   const recentTransactions = transactions.slice(0, 5);
@@ -110,9 +182,19 @@ export default function DashboardClient({ transactions, budgetsStatus }: Dashboa
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Tổng quan tài chính</h1>
-        <p className="text-slate-600 dark:text-slate-400 mt-1">Xin chào! Dưới đây là thống kê tình hình thu chi mới nhất của bạn.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Tổng quan tài chính</h1>
+          <p className="text-slate-600 dark:text-slate-400 mt-1">Xin chào! Dưới đây là thống kê tình hình thu chi mới nhất của bạn.</p>
+        </div>
+        <button
+          onClick={() => fetchData(true)}
+          disabled={isRefreshing}
+          className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all disabled:opacity-50"
+        >
+          <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          Làm mới
+        </button>
       </div>
 
       {/* Stats Cards */}
@@ -178,9 +260,31 @@ export default function DashboardClient({ transactions, budgetsStatus }: Dashboa
       {/* Charts Section */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         {/* Income vs Expense BarChart */}
-        <div className="lg:col-span-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/50 p-6 shadow-xl backdrop-blur-md">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Biểu đồ thu chi tuần này</h2>
-          <div className="h-80 w-full">
+        <div className="lg:col-span-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/50 p-6 shadow-xl backdrop-blur-md flex flex-col">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Biểu đồ thu chi</h2>
+            <div className="flex bg-slate-100 dark:bg-slate-800/50 p-1 rounded-lg">
+              <button
+                onClick={() => setTimeFilter('week')}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${timeFilter === 'week' ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
+              >
+                Tuần
+              </button>
+              <button
+                onClick={() => setTimeFilter('month')}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${timeFilter === 'month' ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
+              >
+                Tháng
+              </button>
+              <button
+                onClick={() => setTimeFilter('year')}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${timeFilter === 'year' ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
+              >
+                Năm
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 w-full min-h-[320px]">
             {barData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={barData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -225,7 +329,7 @@ export default function DashboardClient({ transactions, budgetsStatus }: Dashboa
                         ))}
                       </Pie>
                       <Tooltip 
-                        formatter={(value) => `${value.toLocaleString('vi-VN')} đ`}
+                        formatter={(value: any) => `${Number(value).toLocaleString('vi-VN')} đ`}
                         contentStyle={{ backgroundColor: 'var(--tooltip-bg, #ffffff)', border: '1px solid var(--tooltip-border, #e2e8f0)', borderRadius: '12px', color: 'var(--tooltip-text, #0f172a)' }}
                       />
                     </PieChart>
@@ -302,7 +406,6 @@ export default function DashboardClient({ transactions, budgetsStatus }: Dashboa
           <div className="space-y-4">
             {budgetsStatus.length > 0 ? (
               budgetsStatus.map((budget: any) => {
-                // Determine colors based on spent percentage
                 let barColor = 'bg-emerald-500';
                 let textColor = 'text-emerald-600 dark:text-emerald-400';
                 if (budget.percentage >= 100) {

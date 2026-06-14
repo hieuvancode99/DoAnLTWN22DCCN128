@@ -86,6 +86,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [session]);
 
+  // Tự động ẩn thông báo sau 5 giây
+  useEffect(() => {
+    if (quickToast.show) {
+      const timer = setTimeout(() => {
+        setQuickToast(prev => ({ ...prev, show: false }));
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [quickToast.show]);
+
   // Xử lý forced logout khi tài khoản bị Admin cấm (phải gọi trước mọi conditional return)
   useRealtimeEvents({
     userId: (session?.user as any)?._id,
