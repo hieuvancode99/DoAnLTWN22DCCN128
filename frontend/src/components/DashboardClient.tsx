@@ -225,7 +225,7 @@ export default function DashboardClient({ transactions, budgetsStatus }: Dashboa
                         ))}
                       </Pie>
                       <Tooltip 
-                        formatter={(value) => `${Number(value ?? 0).toLocaleString('vi-VN')} đ`}
+                        formatter={(value) => `${value.toLocaleString('vi-VN')} đ`}
                         contentStyle={{ backgroundColor: 'var(--tooltip-bg, #ffffff)', border: '1px solid var(--tooltip-border, #e2e8f0)', borderRadius: '12px', color: 'var(--tooltip-text, #0f172a)' }}
                       />
                     </PieChart>

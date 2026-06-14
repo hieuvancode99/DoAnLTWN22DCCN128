@@ -3,8 +3,6 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-
 export async function createQuickTransaction(formData: {
   amount: number;
   categoryId: string;
@@ -19,7 +17,7 @@ export async function createQuickTransaction(formData: {
   const token = (session as any).accessToken;
 
   try {
-    const res = await fetch(`${API_URL}/transactions`, {
+    const res = await fetch('http://localhost:5000/api/transactions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
